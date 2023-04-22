@@ -14,7 +14,7 @@ async def update_categories(request):
 # вьюха на сбор даты по отдельной категории
 async def scrape_category(request, category: str):
     start = time.time()
-    category_lowered = category.replace('%', '/').lower()
+    category_lowered = category.lower()
     products = await services.scrape_category(category=category_lowered)
     products_list = services.products_to_list(products)
 

@@ -234,6 +234,21 @@ async def scrape_product(link: str, session, proxy_dict) -> Product:
             attemps -=1
             print(f'some exception at {link} -- {e}')
 
+
+    return Product(
+        date=today,
+        brand='error',
+        name='error',
+        price='error',
+        promo_price='error',
+        card_price='error',
+        rating='error',
+        desc='error',
+        comp='error',
+        url=link,
+        pics='error'
+    )
+
 # собираем данные с определенной страницы категории
 # например https://online.globus.ru/catalog/molochnye-produkty-syr-yaytsa/?PAGEN_1=5
 # при возникновении ошибок, отрабатывает try/except и сессия переподключается
@@ -265,7 +280,7 @@ async def scrape_page(page: str, session) -> list[Product]:
 async def scrape_category(category: str) -> list[Product]:
     print('category is scraping')
     async with CloudflareScraper(timeout=TIME_OUT, trust_env=True) as session:
-        category_link = BASE_DOMAIN + category
+        category_link = BASE_DOMAIN + category.replace('%', '/')
         resp = await session.get(category_link)
         soup = bs(await resp.text(), 'lxml')
         pagination = soup.find('ul', class_='box-content box-shadow')

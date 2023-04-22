@@ -31,18 +31,6 @@ class Schedulerio:
             await self.coroutine()
 
 
-
-# -------- функции --------
-
-# вспомогательная функция для проверки футуры на наличие ошибок и проч шелухи
-# если с ответами от сайтами какие то проблемс, то функция возбуждает эррор со стороны клиента
-# если все ок, то программа продолжает работать
-def checkFuture(responses):
-    for response in responses:
-        if not isinstance(response, ClientResponse) or response.status != 200:
-            raise ClientOSError
-
-
 # -------- корутины --------
 
 # отправляем запросы на каждую категорию к джанге
@@ -58,18 +46,15 @@ async def collect_globus():
                 with open('categories.txt') as file:
                     # запитонячил, простите
                     # распаковываем файл в список из строк, рефакторим строки от лишнего мусора
-                    categories: list[str] = [category.replace('\n', '') for category in file.readlines()]
+                    categories: list[str] = [category.replace('\n', '') for category in file.readlines()[::-1]]
 
                     # асинхронно отправляем запросы на локалхост, чтобы не ждать
                     # ответа от каждой ручки, а отправляем все сразу
                     print('sending requests by each category')
-                    responses = []
                     to_globus = []
-                    for category in categories:
+                    for category in categories[10::]:
                         print(f'request by {category} sended')
-                        resp = await wrap_request(f'{LOCALHOST}/globus/{category}')
-                        responses.append(resp)
-                        checkFuture(responses)
+                        await wrap_request(f'{LOCALHOST}/globus/{category}')
                     # пробегаемся по каждому json файлику, добавляем все словари в список to_globus
                     # после использования, удаляем файлик
                         to_globus = []
@@ -84,6 +69,7 @@ async def collect_globus():
                         to_globus_data = json.dumps(to_globus)
                         to_globus_data = json.loads(str(to_globus_data))
                         json.dump(to_globus_data, globus_json_file, ensure_ascii=False, indent=4)
+
             return
         except Exception as e:
             attempts -= 1
