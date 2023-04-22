@@ -4,6 +4,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+
+# custom
+categories.txt
+dynamic_panel/globus/playground.py
+
 # C extensions
 *.so
 

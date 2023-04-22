@@ -1,7 +1,9 @@
-import asyncio
+import asyncio, json, os
 from head_services import Schedulerio, collect_globus
 
-schedule = Schedulerio(collect_globus, '2023-04-19 18:23')
+
+# установите время в формате "%Y-%m-%d %H:%M", например '2023-04-20 12:46'
+schedule = Schedulerio(collect_globus, '2023-04-22 20:14')
 
 async def main():
     while True:

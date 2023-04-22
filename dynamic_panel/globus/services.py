@@ -1,6 +1,9 @@
 import asyncio, collections, bs4, json
+import random
+import aiohttp
 from aiocfscrape import CloudflareScraper
 from bs4 import BeautifulSoup as bs
+from aiohttp import ClientTimeout
 from datetime import date
 from pathlib import Path
 from aiohttp.client_exceptions import ClientOSError
@@ -10,9 +13,9 @@ from aiohttp.client_exceptions import ClientOSError
 
 # домен глобуса
 BASE_DOMAIN = 'https://online.globus.ru'
-
-# путь до корня рабочей папки
+TIME_OUT = ClientTimeout(total=3600)
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+PROXIES = json.load(open(f'{ROOT_DIR}/dynamic_panel/proxies.json'))
 
 
 # -------- Классы --------
@@ -164,87 +167,96 @@ async def update_categories_file():
 
 # сбор даты с указанной линки
 # возвращает именнованный кортеж Product
-async def scrape_product(link: str) -> Product:
+async def scrape_product(link: str, session, proxy_dict) -> Product:
     today = date.today().strftime('%d/%m/%Y')
-    async with CloudflareScraper() as session:
-        resp = await session.get(url=link, timeout=300)
-        if resp.status == 200:
-            soup = bs(await resp.text(), 'lxml')
-            getTag = GetTagValue(soup)
+    attemps = 5
+    while attemps:
+        try:
+            proxy_addres = proxy_dict['proxy']
+            proxy_auth = aiohttp.BasicAuth(proxy_dict['user'], proxy_dict['password'])
+            resp = await session.get(url=link, proxy=proxy_addres, proxy_auth=proxy_auth)
+            if resp.status == 200:
+                soup = bs(await resp.text(), 'lxml')
+                getTag = GetTagValue(soup)
 
-            price_tag = soup.find('span', class_='item-price__num')
-            price = price_tag.find('meta').get('content').replace(' ', '.')
+                price_tag = soup.find('span', class_='item-price__num')
+                price = price_tag.find('meta').get('content').replace(' ', '.')
 
-            name = refactor_name(getTag.scope('h1', {'class': 'js-with-nbsp-after-digit'}))
+                name = refactor_name(getTag.scope('h1', {'class': 'js-with-nbsp-after-digit'}))
 
-            tbody = soup.find('tbody')
-            arr = []
-            for td in tbody.find_all('td'):
-                arr.append(td.text.replace('\n', '').strip())
-            brand_comp_dict = list_to_dict(arr)
-            getDict = GetDictValue(brand_comp_dict)
+                tbody = soup.find('tbody')
+                arr = []
+                for td in tbody.find_all('td'):
+                    arr.append(td.text.replace('\n', '').strip())
+                brand_comp_dict = list_to_dict(arr)
+                getDict = GetDictValue(brand_comp_dict)
 
-            pics_tags = soup.find_all('img', class_='product_big_pic')
-            pics = ''
-            for pic in pics_tags:
-                pics += f'{BASE_DOMAIN}{pic.get("src")}, '
+                pics_tags = soup.find_all('img', class_='product_big_pic')
+                pics = ''
+                for pic in pics_tags:
+                    pics += f'{BASE_DOMAIN}{pic.get("src")}, '
 
-            desc = getTag.scope('p', {'itemprop': 'description'})
+                desc = getTag.scope('p', {'itemprop': 'description'})
 
-            old_price_tag = getTag.scope('span', {'class': 'item-price__old'})
+                old_price_tag = getTag.scope('span', {'class': 'item-price__old'})
 
-            if old_price_tag:
-                oldprice = old_price_tag.replace('\n', '').replace(' ', '.')
-                return Product(
-                    date=today,
-                    brand=getDict.value('Бренд'),
-                    name=name,
-                    price=oldprice,
-                    promo_price=price,
-                    card_price=price,
-                    rating=None,
-                    desc=desc,
-                    comp=getDict.value('Состав'),
-                    url=link,
-                    pics=pics
-                )
-            else:
+                if old_price_tag:
+                    oldprice = old_price_tag.replace('\n', '').replace(' ', '.')
+                    return Product(
+                        date=today,
+                        brand=getDict.value('Бренд'),
+                        name=name,
+                        price=oldprice,
+                        promo_price=price,
+                        card_price=price,
+                        rating=None,
+                        desc=desc,
+                        comp=getDict.value('Состав'),
+                        url=link,
+                        pics=pics
+                    )
+                else:
 
-                return Product(
-                    date=today,
-                    brand=getDict.value('Бренд'),
-                    name=name,
-                    price=price,
-                    promo_price=None,
-                    card_price=None,
-                    rating=None,
-                    desc=desc,
-                    comp=getDict.value('Состав'),
-                    url=link,
-                    pics=pics
-                )
-
+                    return Product(
+                        date=today,
+                        brand=getDict.value('Бренд'),
+                        name=name,
+                        price=price,
+                        promo_price=None,
+                        card_price=None,
+                        rating=None,
+                        desc=desc,
+                        comp=getDict.value('Состав'),
+                        url=link,
+                        pics=pics
+                    )
+        except Exception as e:
+            attemps -=1
+            print(f'some exception at {link} -- {e}')
 
 # собираем данные с определенной страницы категории
 # например https://online.globus.ru/catalog/molochnye-produkty-syr-yaytsa/?PAGEN_1=5
 # при возникновении ошибок, отрабатывает try/except и сессия переподключается
 # в противном случае корутина возвращает False и на этапе проверки
 # функция products_to_list возвращает пустое значение, а вьюха 404
-async def scrape_page(page: str) -> list[Product]:
+async def scrape_page(page: str, session) -> list[Product]:
     print(f'page {page} is scraping')
     attempts = 5
     while attempts:
         try:
-            async with CloudflareScraper() as session:
-                resp = await session.get(page, allow_redirects=True, timeout=300)
-                soup = bs(await resp.text(), 'lxml')
-                products = soup.find_all('a', class_='catalog-section__item__link catalog-section__item__link--one-line notrans')
+            proxy = random.choice(PROXIES)
+            proxy_addres = proxy['proxy']
+            proxy_auth = aiohttp.BasicAuth(proxy['user'], proxy['password'])
+            resp = await session.get(page, allow_redirects=True, proxy=proxy_addres, proxy_auth=proxy_auth)
+            soup = bs(await resp.text(), 'lxml')
+            products = soup.find_all('a', class_='catalog-section__item__link catalog-section__item__link--one-line notrans')
 
-                return await asyncio.gather(
-                    *(scrape_product(f'https://online.globus.ru{link.get("href")}') for link in products)
-                )
-        except ClientOSError:
+            return await asyncio.gather(
+                *(scrape_product(f'https://online.globus.ru{link.get("href")}', session=session, proxy_dict=proxy) for link in products)
+            )
+        except Exception as e:
             attempts -= 1
+            print(f'some exception at {page} -- {e}')
 
     return False
 
@@ -252,14 +264,14 @@ async def scrape_page(page: str) -> list[Product]:
 # например https://online.globus.ru/catalog/molochnye-produkty-syr-yaytsa/
 async def scrape_category(category: str) -> list[Product]:
     print('category is scraping')
-    async with CloudflareScraper() as session:
-        category_link = BASE_DOMAIN + category.replace('%', '/').lower()
+    async with CloudflareScraper(timeout=TIME_OUT, trust_env=True) as session:
+        category_link = BASE_DOMAIN + category
         resp = await session.get(category_link)
         soup = bs(await resp.text(), 'lxml')
         pagination = soup.find('ul', class_='box-content box-shadow')
         max_page = find_last_page_number(soup=pagination)
         products = await asyncio.gather(
-            *(scrape_page(f'{category_link}?PAGEN_1={cur_page+1}') for cur_page in range(max_page)),
+            *(scrape_page(f'{category_link}?PAGEN_1={cur_page+1}', session=session) for cur_page in range(max_page)),
             return_exceptions=True
         )
         return products

@@ -1,0 +1,17 @@
+[
+    {
+        "proxy": "http://45.86.3.166:6969",
+        "user": "user83136",
+        "password": "ua8iok"
+    },
+    {
+        "proxy": "http://45.86.3.206:6969",
+        "user": "user83136",
+        "password": "ua8iok"
+    },
+    {
+        "proxy": "http://45.88.208.24:6969",
+        "user": "user83136",
+        "password": "ua8iok"
+    }
+]
