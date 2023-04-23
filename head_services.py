@@ -46,13 +46,13 @@ async def collect_globus():
                 with open('categories.txt') as file:
                     # запитонячил, простите
                     # распаковываем файл в список из строк, рефакторим строки от лишнего мусора
-                    categories: list[str] = [category.replace('\n', '') for category in file.readlines()[::-1]]
+                    categories: list[str] = [category.replace('\n', '') for category in file.readlines()]
 
                     # асинхронно отправляем запросы на локалхост, чтобы не ждать
                     # ответа от каждой ручки, а отправляем все сразу
                     print('sending requests by each category')
                     to_globus = []
-                    for category in categories[10::]:
+                    for category in categories:
                         print(f'request by {category} sended')
                         await wrap_request(f'{LOCALHOST}/globus/{category}')
                     # пробегаемся по каждому json файлику, добавляем все словари в список to_globus
@@ -65,10 +65,10 @@ async def collect_globus():
                         os.remove(f'{category}.json')
 
                     # запись to_globus в мейн файл со всеми категориями
-                    with open('globus.json', 'w', encoding='utf-8') as globus_json_file:
-                        to_globus_data = json.dumps(to_globus)
-                        to_globus_data = json.loads(str(to_globus_data))
-                        json.dump(to_globus_data, globus_json_file, ensure_ascii=False, indent=4)
+                        with open('globus.json', 'w', encoding='utf-8') as globus_json_file:
+                            to_globus_data = json.dumps(to_globus)
+                            to_globus_data = json.loads(str(to_globus_data))
+                            json.dump(to_globus_data, globus_json_file, ensure_ascii=False, indent=4)
 
             return
         except Exception as e:
