@@ -43,6 +43,7 @@ async def collect_globus():
             async with CloudflareScraper(trust_env=True) as session:
                 await session.get(LOCALHOST + '/globus/update_categories')
                 print('categories updated')
+                to_globus = []
                 with open('categories.txt') as file:
                     # запитонячил, простите
                     # распаковываем файл в список из строк, рефакторим строки от лишнего мусора
@@ -51,21 +52,20 @@ async def collect_globus():
                     # асинхронно отправляем запросы на локалхост, чтобы не ждать
                     # ответа от каждой ручки, а отправляем все сразу
                     print('sending requests by each category')
-                    to_globus = []
                     for category in categories:
                         print(f'request by {category} sended')
                         await wrap_request(f'{LOCALHOST}/globus/{category}')
                     # пробегаемся по каждому json файлику, добавляем все словари в список to_globus
                     # после использования, удаляем файлик
-                        to_globus = []
                         with open(f'{category}.json', 'r', encoding='utf-8') as category_json_file:
                             json_file_data = json.load(category_json_file)
                             to_globus += json_file_data
 
                         os.remove(f'{category}.json')
 
-                    # запись to_globus в мейн файл со всеми категориями
+                        # запись to_globus в мейн файл со всеми категориями
                         with open('globus.json', 'w', encoding='utf-8') as globus_json_file:
+
                             to_globus_data = json.dumps(to_globus)
                             to_globus_data = json.loads(str(to_globus_data))
                             json.dump(to_globus_data, globus_json_file, ensure_ascii=False, indent=4)

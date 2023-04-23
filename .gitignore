@@ -8,7 +8,7 @@ __pycache__/
 # custom
 categories.txt
 dynamic_panel/globus/playground.py
-
+globus.json
 # C extensions
 *.so
 
