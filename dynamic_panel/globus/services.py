@@ -8,20 +8,18 @@ from datetime import date
 from pathlib import Path
 from aiohttp.client_exceptions import ClientOSError
 
-
 # -------- Константы --------
 
-# домен глобуса
 BASE_DOMAIN = 'https://online.globus.ru'
 TIME_OUT = ClientTimeout(total=3600)
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 PROXIES = json.load(open(f'{ROOT_DIR}/dynamic_panel/proxies.json'))
 
-
 # -------- Классы --------
 
 # именованый кортеж под объект для json файла
 Product = collections.namedtuple('Product', 'date brand name pics price promo_price card_price rating desc comp url')
+
 
 # класс выдергивает значение из объекта супа
 # возвращает текст тега или None
@@ -29,7 +27,7 @@ class GetTagValue:
     def __init__(self, tag: bs4.Tag):
         self.tag = tag
 
-    def value(self, tag_name: str) ->str:
+    def value(self, tag_name: str) -> str | None:
         try:
             return self.tag.find(tag_name).text
         except:
@@ -37,9 +35,27 @@ class GetTagValue:
 
     def scope(self, tag_name: str, scope: dict):
         try:
-            return self.tag.find(tag_name, scope).text
+            tag = self.tag.find(tag_name, scope)
+            return tag.text
         except:
             return None
+
+    # рефакторинг ценника без скидок
+    def oldprice(self):
+        try:
+            oldprice_tag = self.tag.find('span', {'class': 'item-price__old'})
+            oldprice_main = oldprice_tag.text.replace('\n', '').replace(' ', '.')
+            oldprice_sup = oldprice_tag.find('sup').text
+
+            oldprice = oldprice_main[:-len(oldprice_sup)] + f'.{oldprice_sup}'
+            return oldprice
+
+        except Exception as e:
+            print(e)
+            return None
+
+
+
 
 
 # выдергивает значение из словаря
@@ -62,13 +78,12 @@ class GetDictValue:
 # нечетные - ключи, четные - значения
 def list_to_dict(arr):
     dict = {}
-    for i in range(len(arr)+1):
+    for i in range(len(arr) + 1):
         try:
             if not i % 2:
-                dict.update({arr[i]: arr[i+1]})
+                dict.update({arr[i]: arr[i + 1]})
         except IndexError:
             continue
-
 
     return dict
 
@@ -87,6 +102,7 @@ def products_to_list(products):
             products_list.append(product)
 
     return products_list
+
 
 # вспомогательный алгоритм для поиска последней страницы пагинации категории
 # используется в корутине scrape_category
@@ -164,7 +180,6 @@ async def update_categories_file():
         )
 
 
-
 # сбор даты с указанной линки
 # возвращает именнованный кортеж Product
 async def scrape_product(link: str, session, proxy_dict) -> Product:
@@ -180,7 +195,7 @@ async def scrape_product(link: str, session, proxy_dict) -> Product:
                 getTag = GetTagValue(soup)
 
                 price_tag = soup.find('span', class_='item-price__num')
-                price = price_tag.find('meta').get('content').replace(' ', '.')
+                price = price_tag.find('meta').get('content').replace(' ', '.').strip('.')
 
                 name = refactor_name(getTag.scope('h1', {'class': 'js-with-nbsp-after-digit'}))
 
@@ -198,23 +213,38 @@ async def scrape_product(link: str, session, proxy_dict) -> Product:
 
                 desc = getTag.scope('p', {'itemprop': 'description'})
 
-                old_price_tag = getTag.scope('span', {'class': 'item-price__old'})
+                old_price = getTag.oldprice()
 
-                if old_price_tag:
-                    oldprice = old_price_tag.replace('\n', '').replace(' ', '.')
+                if old_price:
+                    if float(old_price) > float(price):
+                        return Product(
+                            date=today,
+                            brand=getDict.value('Бренд'),
+                            name=name,
+                            price=old_price,
+                            promo_price=price,
+                            card_price=price,
+                            rating=None,
+                            desc=desc,
+                            comp=getDict.value('Состав'),
+                            url=link,
+                            pics=pics
+                        )
+
                     return Product(
                         date=today,
                         brand=getDict.value('Бренд'),
                         name=name,
-                        price=oldprice,
-                        promo_price=price,
-                        card_price=price,
+                        price=price,
+                        promo_price=None,
+                        card_price=None,
                         rating=None,
                         desc=desc,
                         comp=getDict.value('Состав'),
                         url=link,
                         pics=pics
                     )
+
                 else:
 
                     return Product(
@@ -231,9 +261,8 @@ async def scrape_product(link: str, session, proxy_dict) -> Product:
                         pics=pics
                     )
         except Exception as e:
-            attemps -=1
+            attemps -= 1
             print(f'some exception at {link} -- {e}')
-
 
     return Product(
         date=today,
@@ -248,6 +277,7 @@ async def scrape_product(link: str, session, proxy_dict) -> Product:
         url=link,
         pics='error'
     )
+
 
 # собираем данные с определенной страницы категории
 # например https://online.globus.ru/catalog/molochnye-produkty-syr-yaytsa/?PAGEN_1=5
@@ -264,16 +294,19 @@ async def scrape_page(page: str, session) -> list[Product]:
             proxy_auth = aiohttp.BasicAuth(proxy['user'], proxy['password'])
             resp = await session.get(page, allow_redirects=True, proxy=proxy_addres, proxy_auth=proxy_auth)
             soup = bs(await resp.text(), 'lxml')
-            products = soup.find_all('a', class_='catalog-section__item__link catalog-section__item__link--one-line notrans')
+            products = soup.find_all('a',
+                                     class_='catalog-section__item__link catalog-section__item__link--one-line notrans')
 
             return await asyncio.gather(
-                *(scrape_product(f'https://online.globus.ru{link.get("href")}', session=session, proxy_dict=proxy) for link in products)
+                *(scrape_product(f'https://online.globus.ru{link.get("href")}', session=session, proxy_dict=proxy) for
+                  link in products)
             )
         except Exception as e:
             attempts -= 1
             print(f'some exception at {page} -- {e}')
 
     return False
+
 
 # сбор данных по каждой странице категории
 # например https://online.globus.ru/catalog/molochnye-produkty-syr-yaytsa/
@@ -286,7 +319,7 @@ async def scrape_category(category: str) -> list[Product]:
         pagination = soup.find('ul', class_='box-content box-shadow')
         max_page = find_last_page_number(soup=pagination)
         products = await asyncio.gather(
-            *(scrape_page(f'{category_link}?PAGEN_1={cur_page+1}', session=session) for cur_page in range(max_page)),
+            *(scrape_page(f'{category_link}?PAGEN_1={cur_page + 1}', session=session) for cur_page in range(max_page)),
             return_exceptions=True
         )
         return products

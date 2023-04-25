@@ -1,16 +1,26 @@
 [
     {
-        "proxy": "http://45.86.3.166:6969",
+        "proxy": "http://213.139.231.197:6815",
         "user": "user83136",
         "password": "ua8iok"
     },
     {
-        "proxy": "http://45.86.3.206:6969",
+        "proxy": "http://194.156.127.41:6815",
         "user": "user83136",
         "password": "ua8iok"
     },
     {
-        "proxy": "http://45.88.208.24:6969",
+        "proxy": "http://194.156.127.84:6815",
+        "user": "user83136",
+        "password": "ua8iok"
+    },
+    {
+        "proxy": "http://176.53.187.143:6815",
+        "user": "user83136",
+        "password": "ua8iok"
+    },
+    {
+        "proxy": "http://213.139.231.106:6815",
         "user": "user83136",
         "password": "ua8iok"
     }
