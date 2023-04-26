@@ -3,7 +3,7 @@ from head_services import Schedulerio, collect_globus
 
 
 # установите время в формате "%Y-%m-%d %H:%M", например '2023-04-20 12:46'
-schedule = Schedulerio(collect_globus, '2023-04-23 11:45')
+schedule = Schedulerio(collect_globus, '2023-04-26 09:56')
 
 async def main():
     while True:

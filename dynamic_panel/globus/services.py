@@ -41,17 +41,16 @@ class GetTagValue:
             return None
 
     # рефакторинг ценника без скидок
-    def oldprice(self):
+    def oldprice(self) -> str|None:
         try:
             oldprice_tag = self.tag.find('span', {'class': 'item-price__old'})
-            oldprice_main = oldprice_tag.text.replace('\n', '').replace(' ', '.')
+            oldprice_main = oldprice_tag.text.replace('\n', '').replace('\xa0', '').replace(' ', '')
             oldprice_sup = oldprice_tag.find('sup').text
 
             oldprice = oldprice_main[:-len(oldprice_sup)] + f'.{oldprice_sup}'
             return oldprice
 
         except Exception as e:
-            print(e)
             return None
 
 
