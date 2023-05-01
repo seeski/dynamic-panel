@@ -94,8 +94,9 @@ def products_to_list(products):
     print('products to list working')
     products_list = []
     for arr in products:
-        print(type(arr))
+        print(type(arr), len(arr))
         if not isinstance(arr, list):
+            print('arr is not list')
             return []
         for product in arr:
             products_list.append(product)
@@ -186,8 +187,10 @@ async def scrape_product(link: str, session, proxy_dict) -> Product:
     attemps = 5
     while attemps:
         try:
+            print(f'product {link} is scraping')
             proxy_addres = proxy_dict['proxy']
             proxy_auth = aiohttp.BasicAuth(proxy_dict['user'], proxy_dict['password'])
+            await asyncio.sleep(10)
             resp = await session.get(url=link, proxy=proxy_addres, proxy_auth=proxy_auth)
             if resp.status == 200:
                 soup = bs(await resp.text(), 'lxml')
@@ -259,9 +262,25 @@ async def scrape_product(link: str, session, proxy_dict) -> Product:
                         url=link,
                         pics=pics
                     )
+
+            else:
+                return Product(
+                    date=today,
+                    brand=resp.status,
+                    name=resp.status,
+                    price=resp.status,
+                    promo_price=resp.status,
+                    card_price=resp.status,
+                    rating=resp.status,
+                    desc=resp.status,
+                    comp=resp.status,
+                    url=link,
+                    pics=resp.status
+                )
+
         except Exception as e:
             attemps -= 1
-            print(f'some exception at {link} -- {e}')
+            print(f'some exception at {link} -- {type(e).__name__}: {e}')
 
     return Product(
         date=today,
@@ -311,14 +330,37 @@ async def scrape_page(page: str, session) -> list[Product]:
 # например https://online.globus.ru/catalog/molochnye-produkty-syr-yaytsa/
 async def scrape_category(category: str) -> list[Product]:
     print('category is scraping')
-    async with CloudflareScraper(timeout=TIME_OUT, trust_env=True) as session:
-        category_link = BASE_DOMAIN + category.replace('%', '/')
-        resp = await session.get(category_link)
-        soup = bs(await resp.text(), 'lxml')
-        pagination = soup.find('ul', class_='box-content box-shadow')
-        max_page = find_last_page_number(soup=pagination)
-        products = await asyncio.gather(
-            *(scrape_page(f'{category_link}?PAGEN_1={cur_page + 1}', session=session) for cur_page in range(max_page)),
-            return_exceptions=True
-        )
-        return products
+    semaphore = asyncio.Semaphore(10000)
+    async with semaphore:
+        async with CloudflareScraper(timeout=TIME_OUT, trust_env=True) as session:
+            category_link = BASE_DOMAIN + category.replace('%', '/')
+            resp = await session.get(category_link)
+            soup = bs(await resp.text(), 'lxml')
+            pagination = soup.find('ul', class_='box-content box-shadow')
+            max_page = find_last_page_number(soup=pagination)
+
+
+            products = []
+            iterations = max_page // 5
+            start = 1
+            for i in range(iterations+1):
+                products_by_i_iteration = await asyncio.gather(
+                    *(
+                        scrape_page(f'{category_link}?PAGEN_1={cur_page}', session=session) for cur_page in range(start, i*5+1)
+                      )
+                )
+                products.append(products_by_i_iteration)
+                start = i * 5 + 1
+
+            if max_page % 5:
+                products_by_last_iteration = await asyncio.gather(
+                    *(
+                        scrape_page(f'{category_link}?PAGEN_1={cur_page}', session=session) for cur_page in range(start, max_page+1)
+                      )
+                )
+                products.append(products_by_last_iteration)
+            # await asyncio.gather(
+            #     *(scrape_page(f'{category_link}?PAGEN_1={cur_page + 1}', session=session) for cur_page in range(max_page)),
+            #     return_exceptions=True
+            # )
+            return products

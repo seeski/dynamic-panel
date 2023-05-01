@@ -21,7 +21,7 @@ async def scrape_category(request, category: str):
     if products_list:
         services.create_category_json(category_name=category_lowered, products=products_list)
         print(time.time() - start)
-        return HttpResponse('good')
+        return HttpResponse(len(products_list))
 
     else:
         print(time.time() - start)
